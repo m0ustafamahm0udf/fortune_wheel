@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:fortune_eyt/web.dart';
 import 'modules/fortune_wheel/views/fortune_wheel_view.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(kIsWeb ? WebFixedSizeWrapper(child: MyApp()) : MyApp());
 }
 
 class MyApp extends StatelessWidget {

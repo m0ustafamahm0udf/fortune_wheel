@@ -119,7 +119,10 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
       _remainingRotationsDisplay = "";
       _remainingTimeDisplay = "";
       _currentAngle = 0.0;
+      _remainingTimeDisplay = "";
+      _currentAngle = 0.0;
     });
+    _sendToArduino(command: "RESET", targetAngle: 0.0, speed: 1.0);
   }
 
   void _start() {
@@ -175,13 +178,48 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     _rotationController.duration = Duration(seconds: _durationSeconds.toInt());
     _rotationController.reset();
     _rotationController.forward();
+
+    _sendToArduino(
+      command: "SPIN",
+      durationMs: _rotationController.duration!.inMilliseconds,
+      totalRotations: calc.totalRotations,
+      targetAngle: calc.endAngle * 180 / 3.14159, // Approx degrees
+    );
   }
 
   void _stop() {
     if (!_isSpinning) return;
 
     _rotationController.stop();
+    _sendToArduino(
+      command: "STOP",
+      currentAngle: _currentAngle * 180 / 3.14159,
+    );
     _onSpinComplete();
+  }
+
+  void _sendToArduino({
+    required String command,
+    int? durationMs,
+    double? totalRotations,
+    double? targetAngle,
+    double? currentAngle,
+    double? speed,
+  }) {
+    // Simulation of sending data to a Serial port
+    debugPrint("--------------------------------------------------");
+    debugPrint("📡 ARDUINO OUTPUT SIMULATION");
+    debugPrint("--------------------------------------------------");
+    debugPrint("Command: $command");
+    if (durationMs != null) debugPrint("Duration: ${durationMs}ms");
+    if (speed != null) debugPrint("Speed: ${speed.toStringAsFixed(1)} rps");
+    if (totalRotations != null)
+      debugPrint("Total Rotations: ${totalRotations.toStringAsFixed(2)}");
+    if (targetAngle != null)
+      debugPrint("Target Angle: ${targetAngle.toStringAsFixed(1)}°");
+    if (currentAngle != null)
+      debugPrint("Stop Angle: ${currentAngle.toStringAsFixed(1)}°");
+    debugPrint("--------------------------------------------------");
   }
 
   void _onSpinComplete() {

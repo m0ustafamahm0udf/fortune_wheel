@@ -31,13 +31,13 @@ class WheelDisplayWidget extends StatelessWidget {
       height: wheelSize + 80,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 30,
-            spreadRadius: 5,
-          ),
-        ],
+        // boxShadow: [
+        //   BoxShadow(
+        //     color: AppColors.primary.withOpacity(0.31),
+        //     blurRadius: 1,
+        //     spreadRadius: 5,
+        //   ),
+        // ],
       ),
       child: Stack(
         alignment: Alignment.center,
@@ -138,7 +138,7 @@ class WheelDisplayWidget extends StatelessWidget {
                 offset: Offset(0, arrowOffset),
                 child: Container(
                   width: 25,
-                  height: 28,
+                  height: 20,
                   child: CustomPaint(painter: ArrowPainter()),
                 ),
               ),

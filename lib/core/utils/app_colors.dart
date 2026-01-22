@@ -22,15 +22,15 @@ class AppColors {
   static const List<Color> wheelColors = [
     Color(0xFFFF6B6B), // Coral Red
     Color(0xFF4ECDC4), // Turquoise
-    Color(0xFFFFE66D), // Yellow
-    Color(0xFF95E1D3), // Mint
-    Color(0xFFF38181), // Salmon
-    Color(0xFFAA96DA), // Lavender
-    Color(0xFF7FD8BE), // Sea Green
-    Color(0xFFFFAB76), // Peach
-    Color(0xFF6C5CE7), // Purple
-    Color(0xFFFF9FF3), // Pink
-    Color(0xFF54E346), // Green
-    Color(0xFF00D2D3), // Cyan
+    Color(0xFFFFD93D), // Warm Yellow
+    Color(0xFF6C5CE7), // Royal Purple
+    Color(0xFFA8E6CF), // Soft Mint
+    Color(0xFFFF8A65), // Deep Peach
+    Color(0xFF74B9FF), // Soft Blue (New)
+    Color(0xFFA29BFE), // Periwinkle (distinct from Purple)
+    Color(0xFF55E6C1), //Bright Teal
+    Color(0xFFFF7675), // Soft Salmon
+    Color(0xFFFD79A8), // Candy Pink
+    Color(0xFFFAB1A0), // Light Orange
   ];
 }
