@@ -106,6 +106,22 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     });
   }
 
+  void _resetConfiguration() {
+    setState(() {
+      _segmentCount = 8;
+      _items = FortuneWheelService.generateItems(_segmentCount);
+      _segmentColors = FortuneWheelService.generateColors(_segmentCount);
+      _rotationsPerSecond = 1.0;
+      _durationSeconds = 3.0;
+      _winnerIndex = -1;
+      _finalAngleDisplay = "";
+      _actualRotationsDisplay = "";
+      _remainingRotationsDisplay = "";
+      _remainingTimeDisplay = "";
+      _currentAngle = 0.0;
+    });
+  }
+
   void _start() {
     if (_isSpinning) return;
 
@@ -303,6 +319,18 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
         elevation: 0,
         centerTitle: true,
         actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: AppColors.cardDark,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.restore, color: AppColors.error3c),
+              onPressed: _isSpinning ? null : _resetConfiguration,
+              tooltip: 'Reset to Defaults',
+            ),
+          ),
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
