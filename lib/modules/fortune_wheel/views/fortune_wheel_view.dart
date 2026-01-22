@@ -180,22 +180,8 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
   void _stop() {
     if (!_isSpinning) return;
 
-    // Smooth manual stop: animate to a bit forward with deceleration
-    final currentVal = _rotationController.value;
-    double targetVal = currentVal + 0.15; // Glide a bit
-    if (targetVal > 1.0) targetVal = 1.0;
-
-    _rotationController
-        .animateTo(
-          targetVal,
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.easeOutCubic,
-        )
-        .then((_) {
-          if (_isSpinning) {
-            _onSpinComplete();
-          }
-        });
+    _rotationController.stop();
+    _onSpinComplete();
   }
 
   void _onSpinComplete() {
