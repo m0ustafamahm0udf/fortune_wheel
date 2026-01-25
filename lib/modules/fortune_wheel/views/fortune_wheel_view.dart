@@ -8,6 +8,8 @@ import 'components/speed_controls_widget.dart';
 import 'components/spin_result_widget.dart';
 import 'components/control_buttons_widget.dart';
 import 'components/segment_customization_widget.dart';
+import '../services/remote_control_service.dart';
+import '../models/remote_command_model.dart';
 
 class FortuneWheelView extends StatefulWidget {
   const FortuneWheelView({Key? key}) : super(key: key);
@@ -43,6 +45,11 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
   String _actualRotationsDisplay = "";
   String _remainingRotationsDisplay = "";
   String _remainingTimeDisplay = "";
+  bool _isRemoteMode = false;
+  bool _isConnecting = false;
+  final TextEditingController _ipController = TextEditingController(
+    text: "localhost",
+  );
 
   // Spin calculation storage
   double _spinStartAngle = 0.0;
@@ -53,6 +60,104 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     super.initState();
     _initSegments();
     _initAnimations();
+    _initRemoteControl();
+  }
+
+  void _initRemoteControl() {
+    RemoteControlService().commandStream.listen((command) {
+      if (!mounted || !_isRemoteMode) return;
+      _handleRemoteCommand(command);
+    });
+  }
+
+  void _toggleRemoteMode() {
+    setState(() {
+      _isRemoteMode = !_isRemoteMode;
+      if (!_isRemoteMode) {
+        RemoteControlService().disconnect();
+        AppConstance().showErrorToast(context, msg: "Remote Mode Disabled");
+      }
+    });
+  }
+
+  Future<void> _connectToRpi() async {
+    final ip = _ipController.text.trim();
+    if (ip.isEmpty) {
+      AppConstance().showErrorToast(context, msg: "Please enter a valid IP");
+      return;
+    }
+
+    setState(() => _isConnecting = true);
+
+    try {
+      await RemoteControlService().connect(ip);
+      if (mounted) {
+        if (RemoteControlService().isConnected) {
+          AppConstance().showSuccesToast(context, msg: "Connected to RPi");
+        } else {
+          AppConstance().showErrorToast(
+            context,
+            msg: "Failed to connect to RPi",
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        AppConstance().showErrorToast(context, msg: "Connection Error: $e");
+      }
+    } finally {
+      if (mounted) setState(() => _isConnecting = false);
+    }
+  }
+
+  void _handleRemoteCommand(RemoteCommandModel command) {
+    if (mounted) {
+      AppConstance().showSuccesToast(
+        context,
+        msg: "Remote: ${command.command}",
+      );
+    }
+    switch (command.command.toUpperCase()) {
+      case 'SPIN':
+        if (!_isSpinning) {
+          if (command.params != null) {
+            final rps = command.params!['rps'];
+            final duration = command.params!['duration'];
+            setState(() {
+              if (rps != null) _rotationsPerSecond = (rps as num).toDouble();
+              if (duration != null)
+                _durationSeconds = (duration as num).toDouble();
+            });
+          }
+          _start();
+        }
+        break;
+      case 'STOP':
+        if (_isSpinning) _stop();
+        break;
+      case 'RESET':
+        _resetConfiguration();
+        break;
+      case 'UPDATE_CONFIG':
+        if (command.params != null) {
+          final rps = command.params!['rps'];
+          final duration = command.params!['duration'];
+          final segments = command.params!['segments'];
+
+          setState(() {
+            if (rps != null) {
+              _rotationsPerSecond = (rps as num).toDouble();
+            }
+            if (duration != null) {
+              _durationSeconds = (duration as num).toDouble();
+            }
+            if (segments != null) {
+              _updateSegmentCount((segments as num).toInt());
+            }
+          });
+        }
+        break;
+    }
   }
 
   void _initSegments() {
@@ -94,6 +199,7 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     _rotationController.dispose();
     _pulseController.dispose();
     _arrowController.dispose();
+    _ipController.dispose();
     super.dispose();
   }
 
@@ -346,6 +452,28 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
           Container(
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
+              color: _isRemoteMode
+                  ? AppColors.primary.withOpacity(0.2)
+                  : AppColors.cardDark,
+              borderRadius: BorderRadius.circular(12),
+              border: _isRemoteMode
+                  ? Border.all(color: AppColors.primary, width: 1)
+                  : null,
+            ),
+            child: IconButton(
+              icon: Icon(
+                _isRemoteMode ? Icons.developer_board : Icons.language,
+                color: _isRemoteMode ? AppColors.primary : AppColors.greya8,
+              ),
+              onPressed: _isSpinning ? null : _toggleRemoteMode,
+              tooltip: _isRemoteMode
+                  ? 'Switch to Web App Mode'
+                  : 'Switch to Raspberry Pi Mode',
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
               color: AppColors.cardDark,
               borderRadius: BorderRadius.circular(12),
             ),
@@ -382,6 +510,88 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
         padding: AppConstance.padding20,
         child: Column(
           children: [
+            if (_isRemoteMode) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "📡 Raspberry Pi Connection",
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    AppConstance.gap10,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _ipController,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText:
+                                  "IP from RPi screen (e.g. 192.168.1.18)",
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.3),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _isConnecting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : ElevatedButton(
+                                onPressed: _connectToRpi,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                ),
+                                child: Text(
+                                  RemoteControlService().isConnected
+                                      ? "Reconnect"
+                                      : "Connect",
+                                ),
+                              ),
+                      ],
+                    ),
+                    if (RemoteControlService().isConnected) ...[
+                      AppConstance.gap5,
+                      Text(
+                        "Status: Connected to ${RemoteControlService().serverIp}",
+                        style: const TextStyle(
+                          color: Colors.green,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              AppConstance.gap20,
+            ],
             AppConstance.gap20,
             Center(
               child: WheelDisplayWidget(
