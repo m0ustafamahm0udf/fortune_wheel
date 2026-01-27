@@ -120,16 +120,29 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     switch (command.command.toUpperCase()) {
       case 'SPIN':
         if (!_isSpinning) {
+          double? targetAngle;
           if (command.params != null) {
             final rps = command.params!['rps'];
             final duration = command.params!['duration'];
+            final target = command.params!['targetAngle'];
+
             setState(() {
               if (rps != null) _rotationsPerSecond = (rps as num).toDouble();
               if (duration != null)
                 _durationSeconds = (duration as num).toDouble();
             });
+            if (target != null) targetAngle = (target as num).toDouble();
           }
-          _start();
+          _start(remoteTargetAngle: targetAngle);
+        }
+        break;
+      case 'ANGLE':
+        // Continuous angle update from "Real Disk" simulation
+        if (command.params != null) {
+          final angle = command.params!['angle'];
+          if (angle != null) {
+            _updateRotationFromRemote((angle as num).toDouble());
+          }
         }
         break;
       case 'STOP':
@@ -231,7 +244,34 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     _sendToArduino(command: "RESET", targetAngle: 0.0, speed: 1.0);
   }
 
-  void _start() {
+  void _updateRotationFromRemote(double angleDegrees) {
+    if (_isSpinning) {
+      // If local animation is running, we might want to stop it?
+      // Or assuming this mode overrides local animation.
+      _rotationController.stop();
+      _isSpinning = false;
+    }
+
+    // Convert to radians (0-360 -> 0-2pi)
+    // Adjust logic if "angle" is cumulative or modulo.
+    // Assuming input is cumulative or 0-360.
+    // Standardizing to 0-2pi for display.
+    final rads = angleDegrees * 3.14159 / 180.0;
+
+    setState(() {
+      _currentAngle = rads;
+      // Optional: Calculate winner in real-time or just let it update on stop?
+      // Updating winner index logic for visual feedback
+      final result = FortuneWheelService.calculateWinner(
+        currentAngle: _currentAngle,
+        itemCount: _items.length,
+      );
+      _winnerIndex = -1; // Don't show winner while rotating remotely
+      _finalAngleDisplay = "${result.angleInDegrees}°";
+    });
+  }
+
+  void _start({double? remoteTargetAngle}) {
     if (_isSpinning) return;
 
     setState(() {
@@ -242,10 +282,56 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
       _arrowController.forward();
     });
 
-    final calc = FortuneWheelService.calculateSpin(
-      currentAngle: _currentAngle,
-      rotationsPerSecond: _rotationsPerSecond,
-    );
+    SpinCalculation calc;
+
+    if (remoteTargetAngle != null) {
+      // Custom calculation for remote target
+      // We need to reach 'remoteTargetAngle' (degrees)
+      // We want to spin for '_durationSeconds'.
+      // We want roughly '_rotationsPerSecond' speed?
+      // Or just ensure we land on target after totalRotations?
+
+      final targetRad = remoteTargetAngle * 3.14159 / 180.0;
+      double start = _currentAngle;
+
+      // Calculate minimum rotations based on speed
+      double minRotations = _rotationsPerSecond * _durationSeconds;
+
+      // Ensure we end up at targetRad
+      // simple formula:
+      // 1. Current position in circle: start % 2pi
+      // 2. Distance to target: (targetRad - start)
+      //    Wait, we want to go forward.
+
+      // Let's rely on total rotations.
+      // full circles = floor(minRotations)
+      // extra = targetRad - (start % 2pi)
+      // if extra < 0, add 2pi
+
+      double currentMod = start % (2 * 3.14159);
+      double targetMod = targetRad % (2 * 3.14159);
+
+      double diff = targetMod - currentMod;
+      if (diff <= 0) diff += (2 * 3.14159);
+
+      // Add full rotations
+      double totalRad = (minRotations.floor() * 2 * 3.14159) + diff;
+
+      // If totalRad is too small (less than minRotations implied distance), add more turns
+      // (logic above might be slightly off on "speed", but ensures target)
+
+      calc = SpinCalculation(
+        startAngle: start,
+        endAngle: start + totalRad,
+        totalRotations: totalRad / (2 * 3.14159),
+        totalRotationRadians: totalRad,
+      );
+    } else {
+      calc = FortuneWheelService.calculateSpin(
+        currentAngle: _currentAngle,
+        rotationsPerSecond: _rotationsPerSecond,
+      );
+    }
 
     _spinStartAngle = calc.startAngle;
     _totalRotations = calc.totalRotations;
@@ -255,7 +341,7 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
         Tween<double>(begin: calc.startAngle, end: calc.endAngle).animate(
           CurvedAnimation(
             parent: _rotationController,
-            curve: Curves.easeOutQuart,
+            curve: Curves.easeOutQuart, // Use easeOutQuart for predictive spin
           ),
         );
 
