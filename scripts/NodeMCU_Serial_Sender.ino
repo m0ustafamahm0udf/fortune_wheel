@@ -1,6 +1,6 @@
 float current_angle = 0.0;
 const float STEP_ANGLE = 2.0;    // سرعة دوران العجلة للخطوة الواحدة
-const int DELAY_MS = 50;         // التأخير بين كل قراءة (لضبط سرعة الإرسال)
+int delay_ms = 50;               // التأخير بين كل قراءة (لضبط سرعة الإرسال) - يمكن تغييره عبر أمر SPEED
 bool is_running = false;         // حالة الدوران (متوقفة أم تعمل)
 
 void setup() {
@@ -27,6 +27,12 @@ void loop() {
       current_angle = 0.0;
       Serial.print("<"); Serial.print(current_angle); Serial.println(">");
       Serial.println("OK:RESET");
+    } else if (command.startsWith("SPEED:")) {
+      int new_delay = command.substring(6).toInt();
+      if (new_delay >= 1 && new_delay <= 5000) {
+        delay_ms = new_delay;
+        Serial.println("OK:SPEED:" + String(delay_ms));
+      }
     }
   }
 
@@ -42,6 +48,6 @@ void loop() {
     }
 
     // 3. انتظار قليلاً قبل الإرسال القادم
-    delay(DELAY_MS); 
+    delay(delay_ms); 
   }
 }

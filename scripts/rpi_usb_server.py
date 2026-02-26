@@ -170,6 +170,7 @@ def cli_interface():
         print("[2] EXIT SERVER")
         print("[3] START WHEEL (NodeMCU)")
         print("[4] STOP WHEEL (NodeMCU)")
+        print("[5] SET SPEED (DELAY MS)")
         choice = input("Select > ")
 
         if choice == "1":
@@ -195,6 +196,20 @@ def cli_interface():
                 ser_conn.reset_output_buffer()
                 ser_conn.write(b"STOP\r\n")
                 print("✅ Sent STOP command to NodeMCU.")
+            else:
+                print("❌ USB Not connected yet.")
+        elif choice == "5":
+            if ser_conn:
+                val = input("Enter delay in ms (1-5000, current default=50): ")
+                try:
+                    ms = int(val)
+                    if 1 <= ms <= 5000:
+                        ser_conn.write(f"SPEED:{ms}\r\n".encode())
+                        print(f"✅ Sent SPEED:{ms} to NodeMCU.")
+                    else:
+                        print("❌ Value must be between 10 and 500.")
+                except ValueError:
+                    print("❌ Invalid number.")
             else:
                 print("❌ USB Not connected yet.")
 
