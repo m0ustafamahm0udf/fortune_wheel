@@ -6,6 +6,7 @@ import socket
 import sys
 import serial
 import time
+import re
 
 # متغيرات الاتصال بالسيريال (USB)
 SERIAL_PORT = '/dev/cu.usbserial-0001' # استبدله بـ /dev/ttyUSB0 أو /dev/ttyACM0 في الراسبيري
@@ -69,54 +70,57 @@ def broadcast_command(command, params=None):
     payload = json.dumps({"command": command, "params": params})
     asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
 
+FRAME_PATTERN = re.compile(r'<([^>]+)>')
+
 def serial_reader_task():
     """
-    هذه الدالة تعمل في الخلفية:
-    تتصل بمنفذ الـ USB، تقرأ القيم (الزوايا)، 
+    تتصل بمنفذ الـ USB، تقرأ القيم (الزوايا) باستخدام framing markers،
     وتقوم ببثها لتطبيق Flutter.
+    تستخدم بافر تراكمي لتجنب قراءة أسطر مقطوعة.
     """
     global ser_conn
     try:
-        # إعداد الاتصال بالسيريال
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
         ser.reset_input_buffer()
-        ser_conn = ser # حفظ الاتصال في المتغير العالمي
+        ser_conn = ser
         print(f"\n[USB] 🔌 Successfully connected to NodeMCU on {SERIAL_PORT}")
         
+        serial_buffer = ""
+        
         while True:
-            # إذا كان هناك بيانات قادمة عبر الـ USB
             if ser.in_waiting > 0:
-                # قراءة كل البيانات المتاحة لتفريغ البافر وتجنب التراكم والتأخير
-                lines = ser.read(ser.in_waiting).decode('utf-8', errors='ignore').split('\n')
+                raw = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                serial_buffer += raw
                 
-                # أخذ آخر سطر مكتمل (السطر قبل الأخير لأنه قد يكون الأخير غير مكتمل بعد)
-                # أو السطر الأخير إذا كان هناك سطر واحد فقط
-                valid_line = None
-                for line in reversed(lines):
-                    line = line.strip()
-                    if line:
-                        valid_line = line
-                        break
-                        
-                if not valid_line:
+                # Handle OK: responses (e.g. OK:START, OK:STOP, OK:RESET)
+                for ok_match in re.finditer(r'OK:\w+', raw):
+                    print(f"\n[USB] 🟢 NodeMCU Reply: {ok_match.group()}")
+                
+                frames = FRAME_PATTERN.findall(serial_buffer)
+                
+                last_complete = serial_buffer.rfind('>')
+                if last_complete != -1:
+                    serial_buffer = serial_buffer[last_complete + 1:]
+                
+                if not frames:
+                    if len(serial_buffer) > 256:
+                        serial_buffer = serial_buffer[-64:]
                     continue
                 
-                try:
-                    # محاولة تحويل النص إلى رقم عشري (Float) يمثل الزاوية
-                    angle = float(valid_line)
-                    # إرسال الزاوية للتطبيق
-                    broadcast_command("ANGLE", {"angle": angle})
-                    # طباعة قيمة الزاوية على نفس السطر ليرى المستخدم أن البيانات تصل فعلاً
-                    print(f"\r[USB] 🟢 Angle broadcasted: {angle}°    ", end="", flush=True)
-                except ValueError:
-                    # تفادي طباعة الأخطاء عن رسائل START/STOP/RESET
-                    if valid_line.startswith("OK:"):
-                        print(f"\n[USB] 🟢 NodeMCU Reply: {valid_line}")
-                    else:
-                        print(f"\n[USB] ⚠️ Invalid data: {valid_line}")
+                last_valid_angle = None
+                for frame_val in frames:
+                    try:
+                        angle = float(frame_val)
+                        if 0.0 <= angle < 360.0:
+                            last_valid_angle = angle
+                    except ValueError:
+                        pass
+                
+                if last_valid_angle is not None:
+                    broadcast_command("ANGLE", {"angle": last_valid_angle})
+                    print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
             else:
-                 # راحة بسيطة للمعالج
-                 time.sleep(0.01)
+                time.sleep(0.01)
 
     except serial.SerialException as e:
         print(f"\n[USB] ❌ ERROR: Could not connect to {SERIAL_PORT}.")

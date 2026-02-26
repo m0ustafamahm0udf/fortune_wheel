@@ -25,7 +25,7 @@ void loop() {
       Serial.println("OK:STOP");
     } else if (command.indexOf("RESET") >= 0) {
       current_angle = 0.0;
-      Serial.println(current_angle); // إرسال التحديث فوراً
+      Serial.print("<"); Serial.print(current_angle); Serial.println(">");
       Serial.println("OK:RESET");
     }
   }
@@ -33,7 +33,7 @@ void loop() {
   // إذا كانت العجلة في حالة دوران، استمر في الحساب والإرسال
   if (is_running) {
     // 1. إرسال الزاوية الحالية عبر كابل الـ USB أولاً ليبدأ من 0
-    Serial.println(current_angle);
+    Serial.print("<"); Serial.print(current_angle); Serial.println(">");
 
     // 2. حساب الزاوية الجديدة للفة القادمة
     current_angle += STEP_ANGLE; 
