@@ -73,22 +73,30 @@ class RemoteControlService {
       _channel!.stream.listen(
         (data) {
           try {
-            final decoded = jsonDecode(data.toString());
-            final command = RemoteCommandModel.fromJson(decoded);
+            if (data is List<int>) {
+              final bytes = Uint8List.fromList(data);
+              final byteData = ByteData.sublistView(bytes);
+              final angleDegrees = byteData.getUint16(0, Endian.big) / 10.0;
 
-            if (command.command.toUpperCase() == 'ANGLE') {
+              final command = RemoteCommandModel(
+                command: 'ANGLE',
+                params: {'angle': angleDegrees},
+              );
               _pendingAngle = command;
-              _angleFlushTimer ??= Timer(const Duration(milliseconds: 16), () {
+              _angleFlushTimer ??=
+                  Timer(const Duration(milliseconds: 16), () {
                 _angleFlushTimer = null;
                 final pending = _pendingAngle;
                 _pendingAngle = null;
                 if (pending != null) _commandController.add(pending);
               });
             } else {
+              final decoded = jsonDecode(data.toString());
+              final command = RemoteCommandModel.fromJson(decoded);
               _commandController.add(command);
             }
           } catch (e) {
-            debugPrint("⚠️ Failed to parse command: $data");
+            debugPrint("Failed to parse command: $data");
           }
         },
         onDone: () {

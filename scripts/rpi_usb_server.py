@@ -1,6 +1,7 @@
 import asyncio
 import websockets
 import json
+import struct
 import threading
 import socket
 import sys
@@ -70,6 +71,12 @@ def broadcast_command(command, params=None):
     payload = json.dumps({"command": command, "params": params})
     asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
 
+def broadcast_angle(angle_float):
+    """Send angle as 2-byte binary (uint16 big-endian, value = angle * 10)."""
+    if server_loop is None: return
+    payload = struct.pack('>H', int(angle_float * 10))
+    asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
+
 FRAME_PATTERN = re.compile(r'<([^>]+)>')
 MIN_BROADCAST_INTERVAL = 0.016  # 16ms = ~60 broadcasts/sec max
 
@@ -121,7 +128,7 @@ def serial_reader_task():
                     now = time.monotonic()
                     if now - last_broadcast_time >= MIN_BROADCAST_INTERVAL:
                         last_broadcast_time = now
-                        broadcast_command("ANGLE", {"angle": last_valid_angle})
+                        broadcast_angle(last_valid_angle)
                         print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
             else:
                 time.sleep(0.01)
