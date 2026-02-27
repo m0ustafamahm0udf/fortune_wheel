@@ -19,6 +19,9 @@ class RemoteControlService {
   String _serverIp = "";
   String get serverIp => _serverIp;
 
+  RemoteCommandModel? _pendingAngle;
+  Timer? _angleFlushTimer;
+
   /// Connect to the RPi WebSocket server
   Future<void> connect(String ipInput, {int port = 8080}) async {
     if (_isConnected) await disconnect();
@@ -46,7 +49,7 @@ class RemoteControlService {
         finalPort = int.tryParse(parts[1]) ?? port;
       }
 
-      final uri = Uri.parse('ws://$finalIp:$finalPort/ws');
+      final uri = Uri.parse('ws://$finalIp:$finalPort');
       debugPrint("📡 RemoteControlService: Attempting connect to $uri");
 
       _channel = WebSocketChannel.connect(uri);
@@ -72,8 +75,18 @@ class RemoteControlService {
           try {
             final decoded = jsonDecode(data.toString());
             final command = RemoteCommandModel.fromJson(decoded);
-            _commandController.add(command);
-            debugPrint("📥 Received Remote Command: ${command.command}");
+
+            if (command.command.toUpperCase() == 'ANGLE') {
+              _pendingAngle = command;
+              _angleFlushTimer ??= Timer(const Duration(milliseconds: 16), () {
+                _angleFlushTimer = null;
+                final pending = _pendingAngle;
+                _pendingAngle = null;
+                if (pending != null) _commandController.add(pending);
+              });
+            } else {
+              _commandController.add(command);
+            }
           } catch (e) {
             debugPrint("⚠️ Failed to parse command: $data");
           }
@@ -94,6 +107,9 @@ class RemoteControlService {
   }
 
   Future<void> disconnect() async {
+    _angleFlushTimer?.cancel();
+    _angleFlushTimer = null;
+    _pendingAngle = null;
     await _channel?.sink.close();
     _isConnected = false;
     _serverIp = "";

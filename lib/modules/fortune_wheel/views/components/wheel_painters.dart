@@ -106,7 +106,10 @@ class WheelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant WheelPainter oldDelegate) => true;
+  bool shouldRepaint(covariant WheelPainter oldDelegate) =>
+      items.length != oldDelegate.items.length ||
+      winnerIndex != oldDelegate.winnerIndex ||
+      isSpinning != oldDelegate.isSpinning;
 }
 
 /// Custom painter for the arrow indicator - Premium Design

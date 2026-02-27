@@ -71,6 +71,7 @@ def broadcast_command(command, params=None):
     asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
 
 FRAME_PATTERN = re.compile(r'<([^>]+)>')
+MIN_BROADCAST_INTERVAL = 0.016  # 16ms = ~60 broadcasts/sec max
 
 def serial_reader_task():
     """
@@ -86,13 +87,13 @@ def serial_reader_task():
         print(f"\n[USB] 🔌 Successfully connected to NodeMCU on {SERIAL_PORT}")
         
         serial_buffer = ""
+        last_broadcast_time = 0.0
         
         while True:
             if ser.in_waiting > 0:
                 raw = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
                 serial_buffer += raw
                 
-                # Handle OK: responses (e.g. OK:START, OK:STOP, OK:RESET)
                 for ok_match in re.finditer(r'OK:\w+', raw):
                     print(f"\n[USB] 🟢 NodeMCU Reply: {ok_match.group()}")
                 
@@ -117,8 +118,11 @@ def serial_reader_task():
                         pass
                 
                 if last_valid_angle is not None:
-                    broadcast_command("ANGLE", {"angle": last_valid_angle})
-                    print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
+                    now = time.monotonic()
+                    if now - last_broadcast_time >= MIN_BROADCAST_INTERVAL:
+                        last_broadcast_time = now
+                        broadcast_command("ANGLE", {"angle": last_valid_angle})
+                        print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
             else:
                 time.sleep(0.01)
 

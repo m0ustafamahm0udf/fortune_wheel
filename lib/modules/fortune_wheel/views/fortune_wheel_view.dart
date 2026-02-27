@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/utils/app_colors.dart';
@@ -38,7 +40,11 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
   int _winnerIndex = -1;
   double _rotationsPerSecond = 1.0;
   double _durationSeconds = 3.0;
-  double _currentAngle = 0.0;
+
+  // Wheel angle isolated via ValueNotifier so only the wheel widget rebuilds
+  final ValueNotifier<double> _angleNotifier = ValueNotifier<double>(0.0);
+  double get _currentAngle => _angleNotifier.value;
+  set _currentAngle(double v) => _angleNotifier.value = v;
 
   // Display values
   String _finalAngleDisplay = "";
@@ -54,6 +60,13 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
   // Spin calculation storage
   double _spinStartAngle = 0.0;
   double _totalRotations = 0.0;
+
+  // Remote angle smooth interpolation
+  late AnimationController _remoteAngleController;
+  double _remoteTargetRads = 0.0;
+  double _remoteStartRads = 0.0;
+  double _lastRemoteDegrees = 0.0;
+  double _cumulativeRads = 0.0;
 
   @override
   void initState() {
@@ -112,10 +125,10 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
 
   void _handleRemoteCommand(RemoteCommandModel command) {
     if (mounted) {
-      AppConstance().showSuccesToast(
-        context,
-        msg: "Remote: ${command.command}",
-      );
+      // AppConstance().showSuccesToast(
+      //   context,
+      //   msg: "Remote: ${command.command}",
+      // );
     }
     switch (command.command.toUpperCase()) {
       case 'SPIN':
@@ -194,7 +207,6 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
     _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    _pulseController.addListener(() => setState(() {}));
 
     _arrowController = AnimationController(
       vsync: this,
@@ -204,15 +216,25 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
       begin: 0,
       end: -15,
     ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeOut));
-    _arrowController.addListener(() => setState(() {}));
+
+    _remoteAngleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+    );
+    _remoteAngleController.addListener(() {
+      final t = _remoteAngleController.value;
+      _currentAngle = _remoteStartRads + (_remoteTargetRads - _remoteStartRads) * t;
+    });
   }
 
   @override
   void dispose() {
+    _remoteAngleController.dispose();
     _rotationController.dispose();
     _pulseController.dispose();
     _arrowController.dispose();
     _ipController.dispose();
+    _angleNotifier.dispose();
     super.dispose();
   }
 
@@ -238,37 +260,37 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
       _remainingRotationsDisplay = "";
       _remainingTimeDisplay = "";
       _currentAngle = 0.0;
-      _remainingTimeDisplay = "";
-      _currentAngle = 0.0;
     });
+    _lastRemoteDegrees = 0.0;
+    _cumulativeRads = 0.0;
     _sendToArduino(command: "RESET", targetAngle: 0.0, speed: 1.0);
   }
 
   void _updateRotationFromRemote(double angleDegrees) {
     if (_isSpinning) {
-      // If local animation is running, we might want to stop it?
-      // Or assuming this mode overrides local animation.
       _rotationController.stop();
       _isSpinning = false;
     }
 
-    // Convert to radians (0-360 -> 0-2pi)
-    // Adjust logic if "angle" is cumulative or modulo.
-    // Assuming input is cumulative or 0-360.
-    // Standardizing to 0-2pi for display.
-    final rads = angleDegrees * 3.14159 / 180.0;
+    double delta = angleDegrees - _lastRemoteDegrees;
+    if (delta < -180) delta += 360.0;
+    if (delta > 180) delta -= 360.0;
 
-    setState(() {
-      _currentAngle = rads;
-      // Optional: Calculate winner in real-time or just let it update on stop?
-      // Updating winner index logic for visual feedback
-      final result = FortuneWheelService.calculateWinner(
-        currentAngle: _currentAngle,
-        itemCount: _items.length,
-      );
-      _winnerIndex = -1; // Don't show winner while rotating remotely
-      _finalAngleDisplay = "${result.angleInDegrees}°";
-    });
+    _lastRemoteDegrees = angleDegrees;
+    _cumulativeRads += delta * 3.14159 / 180.0;
+
+    _remoteStartRads = _currentAngle;
+    _remoteTargetRads = _cumulativeRads;
+
+    _remoteAngleController.reset();
+    _remoteAngleController.forward();
+
+    _winnerIndex = -1;
+    final result = FortuneWheelService.calculateWinner(
+      currentAngle: _cumulativeRads,
+      itemCount: _items.length,
+    );
+    _finalAngleDisplay = "${result.angleInDegrees}°";
   }
 
   void _start({double? remoteTargetAngle}) {
@@ -346,13 +368,14 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
         );
 
     _rotationAnimation.addListener(() {
+      _currentAngle = _rotationAnimation.value;
+
       final remaining = FortuneWheelService.calculateRemainingRotations(
         currentAngle: _rotationAnimation.value,
         startAngle: _spinStartAngle,
         totalRotations: _totalRotations,
       );
 
-      // Calculate remaining time
       final totalDuration = _rotationController.duration?.inMilliseconds ?? 0;
       final remainingMillis = totalDuration * (1 - _rotationController.value);
       final remainingSeconds = (remainingMillis / 1000).clamp(
@@ -360,11 +383,15 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
         _durationSeconds,
       );
 
-      setState(() {
-        _currentAngle = _rotationAnimation.value;
-        _remainingRotationsDisplay = remaining.toStringAsFixed(1);
-        _remainingTimeDisplay = remainingSeconds.toStringAsFixed(1);
-      });
+      final newRemaining = remaining.toStringAsFixed(1);
+      final newTime = remainingSeconds.toStringAsFixed(1);
+      if (_remainingRotationsDisplay != newRemaining ||
+          _remainingTimeDisplay != newTime) {
+        setState(() {
+          _remainingRotationsDisplay = newRemaining;
+          _remainingTimeDisplay = newTime;
+        });
+      }
     });
 
     _rotationController.duration = Duration(seconds: _durationSeconds.toInt());
@@ -621,13 +648,15 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
                         Expanded(
                           child: TextField(
                             controller: _ipController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 13,
                             ),
                             decoration: InputDecoration(
-                              hintText:
-                                  "IP from RPi screen (e.g. 192.168.1.18)",
+                              hintText: "192.168.1.18",
                               hintStyle: TextStyle(
                                 color: Colors.white.withOpacity(0.3),
                               ),
@@ -680,14 +709,23 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
             ],
             AppConstance.gap20,
             Center(
-              child: WheelDisplayWidget(
-                wheelSize: wheelSize,
-                currentAngle: _currentAngle,
-                arrowOffset: _arrowAnimation.value,
-                items: _items,
-                getColor: _getItemColor,
-                winnerIndex: _winnerIndex,
-                isSpinning: _isSpinning,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _angleNotifier,
+                  _pulseController,
+                  _arrowController,
+                ]),
+                builder: (context, _) => RepaintBoundary(
+                  child: WheelDisplayWidget(
+                    wheelSize: wheelSize,
+                    currentAngle: _angleNotifier.value,
+                    arrowOffset: _arrowAnimation.value,
+                    items: _items,
+                    getColor: _getItemColor,
+                    winnerIndex: _winnerIndex,
+                    isSpinning: _isSpinning,
+                  ),
+                ),
               ),
             ),
             AppConstance.gap20,
@@ -711,11 +749,12 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
               },
             ),
             AppConstance.gap20,
-            ControlButtonsWidget(
-              isSpinning: _isSpinning,
-              onStart: _start,
-              onStop: _stop,
-            ),
+            if (!RemoteControlService().isConnected)
+              ControlButtonsWidget(
+                isSpinning: _isSpinning,
+                onStart: _start,
+                onStop: _stop,
+              ),
             AppConstance.gap20,
           ],
         ),

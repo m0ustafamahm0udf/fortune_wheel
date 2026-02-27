@@ -1,5 +1,5 @@
 float current_angle = 0.0;
-const float STEP_ANGLE = 2.0;    // سرعة دوران العجلة للخطوة الواحدة
+const float STEP_ANGLE = 1.0;    // سرعة دوران العجلة للخطوة الواحدة
 int delay_ms = 50;               // التأخير بين كل قراءة (لضبط سرعة الإرسال) - يمكن تغييره عبر أمر SPEED
 bool is_running = false;         // حالة الدوران (متوقفة أم تعمل)
 

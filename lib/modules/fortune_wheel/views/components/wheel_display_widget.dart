@@ -74,24 +74,26 @@ class WheelDisplayWidget extends StatelessWidget {
             top: 35,
             child: Transform.rotate(
               angle: currentAngle,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
+              child: RepaintBoundary(
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.5),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: CustomPaint(
+                    size: Size(wheelSize, wheelSize),
+                    painter: WheelPainter(
+                      items: items,
+                      getColor: getColor,
+                      winnerIndex: winnerIndex,
+                      isSpinning: isSpinning,
                     ),
-                  ],
-                ),
-                child: CustomPaint(
-                  size: Size(wheelSize, wheelSize),
-                  painter: WheelPainter(
-                    items: items,
-                    getColor: getColor,
-                    winnerIndex: winnerIndex,
-                    isSpinning: isSpinning,
                   ),
                 ),
               ),
