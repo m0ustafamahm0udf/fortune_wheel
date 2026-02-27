@@ -33,7 +33,7 @@
      ```bash
      ls /dev/cu.*
      OR on RPI
-     /dev/ttyUSB0
+     ls /dev/ttyUSB*
      ```
      *(ستظهر لك قائمة، ابحث عن اسم يشبه `/dev/cu.usbserial-0001`، هذا هو منفذ القطعة!)*
    - **إذا كنت تستخدم ويندوز (Windows):**
