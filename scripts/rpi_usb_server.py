@@ -46,6 +46,7 @@ async def register(websocket):
                         ser_conn.reset_output_buffer()
                         ser_conn.write(b"RESET\r\n")
                         print("[USB] ✅ Sent RESET to NodeMCU.")
+                    reset_angle_tracking()
                     broadcast_command("RESET")
             except Exception:
                 pass 
@@ -71,11 +72,29 @@ def broadcast_command(command, params=None):
     payload = json.dumps({"command": command, "params": params})
     asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
 
+_last_sent_angle = 0.0
+
 def broadcast_angle(angle_float):
-    """Send angle as 2-byte binary (uint16 big-endian, value = angle * 10)."""
+    """Send angle delta as 1-byte binary (int8 signed)."""
+    global _last_sent_angle
     if server_loop is None: return
-    payload = struct.pack('>H', int(angle_float * 10))
+
+    delta = angle_float - _last_sent_angle
+    if delta < -180: delta += 360.0
+    if delta > 180: delta -= 360.0
+
+    _last_sent_angle = angle_float
+
+    delta_int = int(round(delta))
+    if delta_int == 0: return
+
+    delta_int = max(-128, min(127, delta_int))
+    payload = struct.pack('>b', delta_int)
     asyncio.run_coroutine_threadsafe(_do_broadcast(payload), server_loop)
+
+def reset_angle_tracking():
+    global _last_sent_angle
+    _last_sent_angle = 0.0
 
 FRAME_PATTERN = re.compile(r'<([^>]+)>')
 MIN_BROADCAST_INTERVAL = 0.016  # 16ms = ~60 broadcasts/sec max
@@ -189,6 +208,7 @@ def cli_interface():
                 ser_conn.reset_input_buffer()
                 ser_conn.reset_output_buffer()
                 ser_conn.write(b"RESET\r\n")
+            reset_angle_tracking()
             broadcast_command("RESET")
             print("✅ Broadcast RESET sent.")
         elif choice == "2":

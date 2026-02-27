@@ -65,7 +65,6 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
   late AnimationController _remoteAngleController;
   double _remoteTargetRads = 0.0;
   double _remoteStartRads = 0.0;
-  double _lastRemoteDegrees = 0.0;
   double _cumulativeRads = 0.0;
 
   @override
@@ -149,12 +148,11 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
           _start(remoteTargetAngle: targetAngle);
         }
         break;
-      case 'ANGLE':
-        // Continuous angle update from "Real Disk" simulation
+      case 'ANGLE_DELTA':
         if (command.params != null) {
-          final angle = command.params!['angle'];
-          if (angle != null) {
-            _updateRotationFromRemote((angle as num).toDouble());
+          final delta = command.params!['delta'];
+          if (delta != null) {
+            _updateRotationFromDelta((delta as num).toDouble());
           }
         }
         break;
@@ -261,23 +259,17 @@ class _FortuneWheelViewState extends State<FortuneWheelView>
       _remainingTimeDisplay = "";
       _currentAngle = 0.0;
     });
-    _lastRemoteDegrees = 0.0;
     _cumulativeRads = 0.0;
     _sendToArduino(command: "RESET", targetAngle: 0.0, speed: 1.0);
   }
 
-  void _updateRotationFromRemote(double angleDegrees) {
+  void _updateRotationFromDelta(double deltaDegrees) {
     if (_isSpinning) {
       _rotationController.stop();
       _isSpinning = false;
     }
 
-    double delta = angleDegrees - _lastRemoteDegrees;
-    if (delta < -180) delta += 360.0;
-    if (delta > 180) delta -= 360.0;
-
-    _lastRemoteDegrees = angleDegrees;
-    _cumulativeRads += delta * 3.14159 / 180.0;
+    _cumulativeRads += deltaDegrees * 3.14159 / 180.0;
 
     _remoteStartRads = _currentAngle;
     _remoteTargetRads = _cumulativeRads;

@@ -76,11 +76,11 @@ class RemoteControlService {
             if (data is List<int>) {
               final bytes = Uint8List.fromList(data);
               final byteData = ByteData.sublistView(bytes);
-              final angleDegrees = byteData.getUint16(0, Endian.big) / 10.0;
+              final deltaDegrees = byteData.getInt8(0).toDouble();
 
               final command = RemoteCommandModel(
-                command: 'ANGLE',
-                params: {'angle': angleDegrees},
+                command: 'ANGLE_DELTA',
+                params: {'delta': deltaDegrees},
               );
               _pendingAngle = command;
               _angleFlushTimer ??=
