@@ -10,13 +10,29 @@ import time
 import re
 
 # متغيرات الاتصال بالسيريال (USB)
-SERIAL_PORT = '/dev/cu.usbserial-0001' # استبدله بـ /dev/ttyUSB0 أو /dev/ttyACM0 في الراسبيري
+SERIAL_PORT = '/dev/ttyUSB0' # Ensure this is correct, not /dev/ttyUSB01
 BAUD_RATE = 115200
 
 # Global state
 CLIENTS = set()
 server_loop = None
 ser_conn = None # متغير لتخزين الاتصال التسلسلي (Serial) لاستخدامه في إرسال الأوامر
+
+def send_command(command_str):
+    global ser_conn
+    try:
+        if ser_conn and ser_conn.is_open:
+            ser_conn.reset_output_buffer()
+            if isinstance(command_str, str):
+                ser_conn.write(command_str.encode())
+            else:
+                ser_conn.write(command_str)
+            ser_conn.flush()
+        else:
+            print("\n[USB] ❌ Cannot send command, serial port is not connected.")
+    except (serial.SerialException, OSError) as e:
+        print(f"\n[USB] ❌ Failed to send command (Port disconnected?): {e}")
+
 
 async def register(websocket):
     CLIENTS.add(websocket)
@@ -30,22 +46,14 @@ async def register(websocket):
                     print(f"[SERVER] ✅ CONNECTION SUCCESS: App identified as [{platform}]")
                     await websocket.send(json.dumps({"command": "WELCOME", "message": "Connected to RPi USB Server"}))
                 elif data.get("type") == "START":
-                    if ser_conn:
-                        ser_conn.reset_input_buffer()
-                        ser_conn.reset_output_buffer()
-                        ser_conn.write(b"START\r\n")
-                        print("[USB] ✅ Sent START to NodeMCU.")
+                    send_command("START\r\n")
+                    print("[USB] ✅ Sent START to NodeMCU.")
                 elif data.get("type") == "STOP":
-                    if ser_conn:
-                        ser_conn.reset_output_buffer()
-                        ser_conn.write(b"STOP\r\n")
-                        print("[USB] ✅ Sent STOP to NodeMCU.")
+                    send_command("STOP\r\n")
+                    print("[USB] ✅ Sent STOP to NodeMCU.")
                 elif data.get("type") == "RESET":
-                    if ser_conn:
-                        ser_conn.reset_input_buffer()
-                        ser_conn.reset_output_buffer()
-                        ser_conn.write(b"RESET\r\n")
-                        print("[USB] ✅ Sent RESET to NodeMCU.")
+                    send_command("RESET\r\n")
+                    print("[USB] ✅ Sent RESET to NodeMCU.")
                     reset_angle_tracking()
                     broadcast_command("RESET")
             except Exception:
@@ -103,61 +111,70 @@ def serial_reader_task():
     """
     تتصل بمنفذ الـ USB، تقرأ القيم (الزوايا) باستخدام framing markers،
     وتقوم ببثها لتطبيق Flutter.
-    تستخدم بافر تراكمي لتجنب قراءة أسطر مقطوعة.
+    يقوم هذا التاسك أيضاً بإعادة الاتصال تلقائياً عند فقدان الاتصال.
     """
     global ser_conn
-    try:
-        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
-        ser.reset_input_buffer()
-        ser_conn = ser
-        print(f"\n[USB] 🔌 Successfully connected to NodeMCU on {SERIAL_PORT}")
-        
-        serial_buffer = ""
-        last_broadcast_time = 0.0
-        
-        while True:
-            if ser.in_waiting > 0:
-                raw = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
-                serial_buffer += raw
+    while True:
+        try:
+            ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
+            ser.reset_input_buffer()
+            ser_conn = ser
+            print(f"\n[USB] 🔌 Successfully connected to NodeMCU on {SERIAL_PORT}")
+            
+            serial_buffer = ""
+            last_broadcast_time = 0.0
+            
+            while True:
+                try:
+                    if ser.in_waiting > 0:
+                        raw = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+                        serial_buffer += raw
+                        
+                        for ok_match in re.finditer(r'OK:\w+', raw):
+                            print(f"\n[USB] 🟢 NodeMCU Reply: {ok_match.group()}")
+                        
+                        frames = FRAME_PATTERN.findall(serial_buffer)
+                        
+                        last_complete = serial_buffer.rfind('>')
+                        if last_complete != -1:
+                            serial_buffer = serial_buffer[last_complete + 1:]
+                        
+                        if not frames:
+                            if len(serial_buffer) > 256:
+                                serial_buffer = serial_buffer[-64:]
+                            continue
+                        
+                        last_valid_angle = None
+                        for frame_val in frames:
+                            try:
+                                angle = float(frame_val)
+                                if 0.0 <= angle < 360.0:
+                                    last_valid_angle = angle
+                            except ValueError:
+                                pass
+                        
+                        if last_valid_angle is not None:
+                            now = time.monotonic()
+                            if now - last_broadcast_time >= MIN_BROADCAST_INTERVAL:
+                                last_broadcast_time = now
+                                broadcast_angle(last_valid_angle)
+                                print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
+                    else:
+                        time.sleep(0.01)
+                except OSError as inner_e:
+                    print(f"\n[USB] ❌ Connection error during read: {inner_e}")
+                    ser_conn = None
+                    break # Break inner loop to reconnect
                 
-                for ok_match in re.finditer(r'OK:\w+', raw):
-                    print(f"\n[USB] 🟢 NodeMCU Reply: {ok_match.group()}")
-                
-                frames = FRAME_PATTERN.findall(serial_buffer)
-                
-                last_complete = serial_buffer.rfind('>')
-                if last_complete != -1:
-                    serial_buffer = serial_buffer[last_complete + 1:]
-                
-                if not frames:
-                    if len(serial_buffer) > 256:
-                        serial_buffer = serial_buffer[-64:]
-                    continue
-                
-                last_valid_angle = None
-                for frame_val in frames:
-                    try:
-                        angle = float(frame_val)
-                        if 0.0 <= angle < 360.0:
-                            last_valid_angle = angle
-                    except ValueError:
-                        pass
-                
-                if last_valid_angle is not None:
-                    now = time.monotonic()
-                    if now - last_broadcast_time >= MIN_BROADCAST_INTERVAL:
-                        last_broadcast_time = now
-                        broadcast_angle(last_valid_angle)
-                        print(f"\r[USB] Angle: {last_valid_angle}    ", end="", flush=True)
-            else:
-                time.sleep(0.01)
-
-    except serial.SerialException as e:
-        print(f"\n[USB] ❌ ERROR: Could not connect to {SERIAL_PORT}.")
-        print(f"Details: {e}")
-        print("💡 TIP: Verify the USB is plugged in, and SERIAL_PORT is correct (e.g., /dev/ttyUSB0).")
-    except Exception as e:
-        print(f"\n[USB] ❌ Unknown Error: {e}")
+        except serial.SerialException as e:
+            print(f"\n[USB] ❌ ERROR: Could not connect to {SERIAL_PORT}.")
+            print(f"Details: {e}")
+        except Exception as e:
+            print(f"\n[USB] ❌ Unknown Error: {e}")
+            
+        # الانتظار قبل محاولة إعادة الاتصال (Auto-Reconnect)
+        print("[USB] 🔄 Retrying connection in 3 seconds...")
+        time.sleep(3)
 
 async def server_main():
     global server_loop
@@ -204,10 +221,7 @@ def cli_interface():
         choice = input("Select > ")
 
         if choice == "1":
-            if ser_conn:
-                ser_conn.reset_input_buffer()
-                ser_conn.reset_output_buffer()
-                ser_conn.write(b"RESET\r\n")
+            send_command("RESET\r\n")
             reset_angle_tracking()
             broadcast_command("RESET")
             print("✅ Broadcast RESET sent.")
@@ -215,34 +229,22 @@ def cli_interface():
             print("Shutting down...")
             break
         elif choice == "3":
-            if ser_conn:
-                ser_conn.reset_input_buffer()
-                ser_conn.reset_output_buffer()
-                ser_conn.write(b"START\r\n")
-                print("✅ Sent START command to NodeMCU.")
-            else:
-                print("❌ USB Not connected yet.")
+            send_command("START\r\n")
+            print("✅ Sent START command to NodeMCU.")
         elif choice == "4":
-            if ser_conn:
-                ser_conn.reset_output_buffer()
-                ser_conn.write(b"STOP\r\n")
-                print("✅ Sent STOP command to NodeMCU.")
-            else:
-                print("❌ USB Not connected yet.")
+            send_command("STOP\r\n")
+            print("✅ Sent STOP command to NodeMCU.")
         elif choice == "5":
-            if ser_conn:
-                val = input("Enter delay in ms (1-5000, current default=50): ")
-                try:
-                    ms = int(val)
-                    if 1 <= ms <= 5000:
-                        ser_conn.write(f"SPEED:{ms}\r\n".encode())
-                        print(f"✅ Sent SPEED:{ms} to NodeMCU.")
-                    else:
-                        print("❌ Value must be between 10 and 500.")
-                except ValueError:
-                    print("❌ Invalid number.")
-            else:
-                print("❌ USB Not connected yet.")
+            val = input("Enter delay in ms (1-5000, current default=50): ")
+            try:
+                ms = int(val)
+                if 1 <= ms <= 5000:
+                    send_command(f"SPEED:{ms}\r\n")
+                    print(f"✅ Sent SPEED:{ms} to NodeMCU.")
+                else:
+                    print("❌ Value must be between 10 and 5000.")
+            except ValueError:
+                print("❌ Invalid number.")
 
 if __name__ == "__main__":
     cli_interface()
