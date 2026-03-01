@@ -14,3 +14,7 @@ WINDOW_H = 768
 
 # ─── Wheel ───
 SEGMENT_COUNT = 8
+
+# ─── Smooth Rotation (RPi performance) ───
+ROTATION_CACHE_STEPS = 360
+LERP_SPEED = 25

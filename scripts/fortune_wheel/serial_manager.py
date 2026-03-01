@@ -18,21 +18,32 @@ current_delay_ms = 0
 
 _FRAME_PATTERN = re.compile(r'<([^>]+)>')
 
+# ─── أوامر مؤجلة (lock-free) ───
+_pending_cmd = None
+_cmd_lock = threading.Lock()
+
 
 def send_command(cmd: str):
-    """إرسال أمر للـ NodeMCU عبر USB.
+    """إرسال أمر للـ NodeMCU — يتحط في queue والـ reader thread يبعته.
 
-    الأوامر المتاحة:
-        START\\r\\n    — تشغيل المحرك
-        STOP\\r\\n     — إيقاف المحرك
-        RESET\\r\\n    — ريسيت
+    كده الـ Main Thread ما بيعملش lock على الـ Serial أبداً.
     """
-    with _ser_lock:
+    global _pending_cmd
+    with _cmd_lock:
+        _pending_cmd = cmd
+
+
+def _flush_pending_cmd(conn):
+    """يبعت أي أمر معلق — يتنادى من الـ reader thread بس."""
+    global _pending_cmd
+    with _cmd_lock:
+        cmd = _pending_cmd
+        _pending_cmd = None
+    if cmd and conn and conn.is_open:
         try:
-            if _ser_conn and _ser_conn.is_open:
-                _ser_conn.reset_output_buffer()
-                _ser_conn.write(cmd.encode())
-                _ser_conn.flush()
+            conn.reset_output_buffer()
+            conn.write(cmd.encode())
+            conn.flush()
         except Exception as e:
             print(f"[USB] ❌ Send failed: {e}")
 
@@ -43,23 +54,24 @@ def _reader_loop():
 
     while True:
         try:
+            conn = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
+            conn.reset_input_buffer()
             with _ser_lock:
-                _ser_conn = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.05)
-                _ser_conn.reset_input_buffer()
+                _ser_conn = conn
             is_connected = True
             print(f"[USB] 🔌 Connected to {SERIAL_PORT}")
 
             buf = ""
             while True:
                 try:
-                    with _ser_lock:
-                        if _ser_conn is None or not _ser_conn.is_open:
-                            break
-                        waiting = _ser_conn.in_waiting
+                    # ── أرسل أي أمر معلق الأول ──
+                    _flush_pending_cmd(conn)
+
+                    # ── اقرأ البيانات بدون lock ──
+                    waiting = conn.in_waiting
 
                     if waiting > 0:
-                        with _ser_lock:
-                            raw = _ser_conn.read(waiting).decode('utf-8', errors='ignore')
+                        raw = conn.read(waiting).decode('utf-8', errors='ignore')
                         buf += raw
 
                         # طباعة ردود الـ NodeMCU
@@ -72,7 +84,9 @@ def _reader_loop():
                         if last_gt != -1:
                             buf = buf[last_gt + 1:]
 
-                        for fv in frames:
+                        # خد آخر frame بس — الباقي قديم
+                        if frames:
+                            fv = frames[-1]
                             try:
                                 parts = fv.split(',')
                                 a = float(parts[0])
@@ -82,11 +96,10 @@ def _reader_loop():
                                     d = int(parts[1])
                                     if 1 <= d <= 5000:
                                         current_delay_ms = d
-                                print(f"\r[USB] Angle: {a:.1f}° Delay: {current_delay_ms}ms    ", end="", flush=True)
                             except (ValueError, IndexError):
                                 pass
                     else:
-                        time.sleep(0.005)
+                        time.sleep(0.002)
 
                 except OSError:
                     break
@@ -97,7 +110,8 @@ def _reader_loop():
             print(f"[USB] ❌ Unknown: {e}")
 
         is_connected = False
-        _ser_conn = None
+        with _ser_lock:
+            _ser_conn = None
         print("[USB] 🔄 Reconnecting in 3s...")
         time.sleep(3)
 

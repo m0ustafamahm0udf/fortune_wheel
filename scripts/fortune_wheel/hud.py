@@ -1,5 +1,5 @@
 """
-📊 hud.py — واجهة المعلومات (Heads-Up Display)
+hud.py — واجهة المعلومات (Heads-Up Display)
 يعرض حالة الاتصال، الزاوية، والفائز.
 """
 
@@ -8,13 +8,23 @@ import math
 from .colors import WHITE, GREY_A8, ACCENT_GOLD, ACCENT_CYAN, ERROR_RED, PRIMARY
 from .config import SERIAL_PORT
 
+_font_title = None
+_font_info = None
+
+
+def _get_fonts():
+    global _font_title, _font_info
+    if _font_title is None:
+        _font_title = pygame.font.SysFont("Arial", 28, bold=True)
+        _font_info = pygame.font.SysFont("Arial", 18)
+    return _font_title, _font_info
+
 
 def draw(screen, wheel, connected, delay_ms):
     """رسم الـ HUD على الشاشة."""
     w, h = screen.get_size()
 
-    font_title = pygame.font.SysFont("Arial", 28, bold=True)
-    font_info = pygame.font.SysFont("Arial", 18)
+    font_title, font_info = _get_fonts()
 
     # ── العنوان ──
     title = font_title.render("Fortune Wheel", True, WHITE)

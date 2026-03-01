@@ -117,18 +117,12 @@ def main():
                         key_command, wheel, is_fullscreen, screen
                     )
 
-        # ── تحديث الزاوية من الـ Serial ──
+        # ── تحديث الزاوية من الـ Serial (target) ──
         wheel.set_angle_deg(serial_manager.current_angle_deg)
+        wheel.update(dt)
 
         # ── الرسم ──
         screen.fill(BG_COLOR)
-
-        # خلفية gradient خفيفة في الأعلى
-        grad = pygame.Surface((w, 120), pygame.SRCALPHA)
-        for y in range(120):
-            alpha = int(40 * (1 - y / 120))
-            pygame.draw.line(grad, (*PRIMARY, alpha), (0, y), (w, y))
-        screen.blit(grad, (0, 0))
 
         # العجلة
         wheel_radius = min(w, h) * 0.33
