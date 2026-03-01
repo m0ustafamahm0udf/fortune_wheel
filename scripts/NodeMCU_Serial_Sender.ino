@@ -1,31 +1,32 @@
 float current_angle = 0.0;
-const float STEP_ANGLE = 1.0;    // سرعة دوران العجلة للخطوة الواحدة
-int delay_ms = 50;               // التأخير بين كل قراءة (لضبط سرعة الإرسال) - يمكن تغييره عبر أمر SPEED
-bool is_running = false;         // حالة الدوران (متوقفة أم تعمل)
+const float STEP_ANGLE = 1.0;
+int delay_ms = 5;
+bool is_running = false;
+unsigned long last_send_time = 0;
 
 void setup() {
-  // تهيئة الاتصال التسلسلي (Serial) مع جهاز الكمبيوتر/الراسبيري بسرعة 115200
   Serial.begin(115200);
-  // إضافة مهلة زمنية قصيرة لمنع توقف الكود (Blocking) أثناء القراءة
-  Serial.setTimeout(10); 
+  Serial.setTimeout(10);
 }
 
 void loop() {
-  // استقبال الأوامر من السيريال (عبر كابل الـ USB)
+  // استقبال الأوامر من السيريال
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
-    command.trim(); // إزالة أي مسافات أو أسطر إضافية
+    command.trim();
 
     if (command.indexOf("START") >= 0) {
-      current_angle = 0.0; // التصفير لضمان أن يبدأ دائماً من 0
+      current_angle = 0.0;
       is_running = true;
+      last_send_time = millis();
       Serial.println("OK:START");
     } else if (command.indexOf("STOP") >= 0) {
       is_running = false;
       Serial.println("OK:STOP");
     } else if (command.indexOf("RESET") >= 0) {
       current_angle = 0.0;
-      Serial.print("<"); Serial.print(current_angle); Serial.println(">");
+      is_running = false;
+      Serial.print("<"); Serial.print(current_angle); Serial.print(","); Serial.print(delay_ms); Serial.println(">");
       Serial.println("OK:RESET");
     } else if (command.startsWith("SPEED:")) {
       int new_delay = command.substring(6).toInt();
@@ -36,18 +37,15 @@ void loop() {
     }
   }
 
-  // إذا كانت العجلة في حالة دوران، استمر في الحساب والإرسال
-  if (is_running) {
-    // 1. إرسال الزاوية الحالية عبر كابل الـ USB أولاً ليبدأ من 0
-    Serial.print("<"); Serial.print(current_angle); Serial.println(">");
+  // non-blocking: ارسل الزاوية فقط لما يعدي الوقت المحدد
+  if (is_running && (millis() - last_send_time >= (unsigned long)delay_ms)) {
+    last_send_time = millis();
 
-    // 2. حساب الزاوية الجديدة للفة القادمة
-    current_angle += STEP_ANGLE; 
+    Serial.print("<"); Serial.print(current_angle); Serial.print(","); Serial.print(delay_ms); Serial.println(">");
+
+    current_angle += STEP_ANGLE;
     if (current_angle >= 360.0) {
-      current_angle = 0.0; // إعادة التصفير بعد إكمال دورة كاملة
+      current_angle = 0.0;
     }
-
-    // 3. انتظار قليلاً قبل الإرسال القادم
-    delay(delay_ms); 
   }
 }
