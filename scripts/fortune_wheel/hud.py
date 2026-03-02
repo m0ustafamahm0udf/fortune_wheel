@@ -20,7 +20,7 @@ def _get_fonts():
     return _font_title, _font_info
 
 
-def draw(screen, wheel, connected, delay_ms):
+def draw(screen, wheel, connected):
     """رسم الـ HUD على الشاشة."""
     w, h = screen.get_size()
 
@@ -41,23 +41,14 @@ def draw(screen, wheel, connected, delay_ms):
 
     # ── الزاوية الحالية ──
     angle_deg = math.degrees(wheel.angle_rad) % 360
-    screen.blit(font_info.render(f"Angle: {angle_deg:.1f}°", True, GREY_A8), (20, 78))
+    screen.blit(font_info.render(f"Angle: {angle_deg:.1f}", True, GREY_A8), (20, 78))
 
-    # ── الديلاي الحالي + وقت اللفة الكاملة ──
-    if delay_ms > 0:
-        rotation_sec = 360 * delay_ms / 1000.0
-        delay_text = f"Delay: {delay_ms:.1f}ms" if delay_ms < 1 else f"Delay: {delay_ms:.0f}ms"
-        if rotation_sec < 0.1:
-            rotation_text = f"Full rotation: {rotation_sec * 1000:.0f}ms"
-        elif rotation_sec < 1:
-            rotation_text = f"Full rotation: {rotation_sec:.2f}s"
-        else:
-            rotation_text = f"Full rotation: {rotation_sec:.1f}s"
-    else:
-        delay_text = "Delay: --"
-        rotation_text = "Full rotation: --"
-    screen.blit(font_info.render(delay_text, True, ACCENT_CYAN), (20, 104))
-    screen.blit(font_info.render(rotation_text, True, GREY_A8), (20, 130))
+    # ── إعدادات الحركة (Step & Delay) ──
+    from . import serial_manager
+    step_text = f"Step: {serial_manager.current_step_deg} deg"
+    delay_text = f"Delay: {serial_manager.current_delay_ms} ms"
+    screen.blit(font_info.render(step_text, True, ACCENT_CYAN), (20, 104))
+    screen.blit(font_info.render(delay_text, True, GREY_A8), (20, 130))
 
     # ── الفائز ──
     if wheel.winner_index >= 0:

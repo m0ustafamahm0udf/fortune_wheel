@@ -14,7 +14,9 @@ _ser_conn = None
 _ser_lock = threading.Lock()
 is_connected = False
 current_angle_deg = 0.0
-current_delay_ms = 0
+current_velocity_dps = 0.0  # degrees per second from NodeMCU
+current_step_deg = 5.0
+current_delay_ms = 500
 
 _FRAME_PATTERN = re.compile(r'<([^>]+)>')
 
@@ -50,7 +52,8 @@ def _flush_pending_cmd(conn):
 
 def _reader_loop():
     """الحلقة الأساسية لقراءة الزوايا — تعمل في thread خلفي."""
-    global _ser_conn, is_connected, current_angle_deg, current_delay_ms
+    global _ser_conn, is_connected, current_angle_deg, current_velocity_dps
+    global current_step_deg, current_delay_ms
 
     while True:
         try:
@@ -60,7 +63,10 @@ def _reader_loop():
                 _ser_conn = conn
             is_connected = True
             print(f"[USB] 🔌 Connected to {SERIAL_PORT}")
-
+            
+            # Request current step and delay upon connection
+            send_command("INFO\r\n")
+            
             buf = ""
             while True:
                 try:
@@ -74,9 +80,27 @@ def _reader_loop():
                         raw = conn.read(waiting).decode('utf-8', errors='ignore')
                         buf += raw
 
-                        # طباعة ردود الـ NodeMCU
-                        for ok_m in re.finditer(r'OK:[^\r\n]+', raw):
-                            print(f"\n[USB] 🟢 {ok_m.group()}")
+                        # استخراج أكواد OK من الـ buffer لمنع تقطيع البيانات
+                        while "OK:" in buf:
+                            idx = buf.find("OK:")
+                            end_idx = buf.find("\n", idx)
+                            if end_idx == -1:
+                                break # الأمر مكملش لسه، استنى اللفة الجاية
+                                
+                            msg = buf[idx:end_idx].strip()
+                            buf = buf[:idx] + buf[end_idx+1:] # إزالة الأمر من الـ buffer
+                            
+                            print(f"\n[USB] 🟢 {msg}")
+                            if msg.startswith("OK:STEP:"):
+                                try:
+                                    current_step_deg = float(msg.split(":")[2])
+                                except (ValueError, IndexError):
+                                    pass
+                            elif msg.startswith("OK:DELAY:"):
+                                try:
+                                    current_delay_ms = int(msg.split(":")[2])
+                                except (ValueError, IndexError):
+                                    pass
 
                         # استخراج الزوايا من الـ frames
                         frames = _FRAME_PATTERN.findall(buf)
@@ -84,22 +108,18 @@ def _reader_loop():
                         if last_gt != -1:
                             buf = buf[last_gt + 1:]
 
-                        # خد آخر frame بس — الباقي قديم
                         if frames:
                             fv = frames[-1]
                             try:
                                 parts = fv.split(',')
                                 a = float(parts[0])
-                                if 0.0 <= a < 360.0:
-                                    current_angle_deg = a
+                                current_angle_deg = a
                                 if len(parts) >= 2:
-                                    d = float(parts[1])
-                                    if 0.1 <= d <= 5000:
-                                        current_delay_ms = d
+                                    current_velocity_dps = float(parts[1])
                             except (ValueError, IndexError):
                                 pass
                     else:
-                        time.sleep(0.002)
+                        time.sleep(0.001)
 
                 except OSError:
                     break

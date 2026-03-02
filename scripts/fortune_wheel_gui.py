@@ -23,7 +23,7 @@ from fortune_wheel import serial_manager
 from fortune_wheel import hud
 
 
-def _handle_command(command, wheel, is_fullscreen, screen):
+def _handle_command(command, wheel, is_fullscreen, screen, panel):
     """تنفيذ أمر — يرجع (is_fullscreen, screen, running)."""
     running = True
 
@@ -41,6 +41,7 @@ def _handle_command(command, wheel, is_fullscreen, screen):
         serial_manager.send_command("RESET\r\n")
         wheel.winner_index = -1
         wheel.set_angle_deg(0)
+        wheel.set_velocity(0)
         print("[CMD] 🔄 RESET")
 
     elif command == 'FULLSCREEN':
@@ -106,7 +107,7 @@ def main():
             btn_command = panel.handle_event(event)
             if btn_command:
                 is_fullscreen, screen, running = _handle_command(
-                    btn_command, wheel, is_fullscreen, screen
+                    btn_command, wheel, is_fullscreen, screen, panel
                 )
 
             # اختصارات الكيبورد
@@ -114,11 +115,12 @@ def main():
                 key_command = KEY_MAP.get(event.key)
                 if key_command:
                     is_fullscreen, screen, running = _handle_command(
-                        key_command, wheel, is_fullscreen, screen
+                        key_command, wheel, is_fullscreen, screen, panel
                     )
 
-        # ── تحديث الزاوية من الـ Serial (target) ──
+        # ── تحديث الزاوية والسرعة من الـ Serial ──
         wheel.set_angle_deg(serial_manager.current_angle_deg)
+        wheel.set_velocity(serial_manager.current_velocity_dps)
         wheel.update(dt)
 
         # ── الرسم ──
@@ -130,7 +132,7 @@ def main():
         wheel.draw(screen, wheel_center, wheel_radius, dt)
 
         # واجهة المعلومات
-        hud.draw(screen, wheel, serial_manager.is_connected, serial_manager.current_delay_ms)
+        hud.draw(screen, wheel, serial_manager.is_connected)
 
         # أزرار التحكم
         panel.draw(screen, dt)

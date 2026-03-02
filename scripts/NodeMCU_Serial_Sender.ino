@@ -1,52 +1,77 @@
-float current_angle = 0.0;
-const float STEP_ANGLE = 1.0;
-float delay_ms = 0.1;
+// ── Spin Configuration (Step & Delay) ──
+float current_angle = 0.0;       // cumulative degrees
+float step_degrees = 10.0;        // الدرجات المضافة في كل خطوة
+unsigned long delay_ms = 1;    // التأخير بين كل خطوة بالمللي ثانية
 bool is_running = false;
-unsigned long last_send_time_us = 0;  // microseconds
+
+// ── Timing ──
+unsigned long last_send_time_ms = 0;
 
 void setup() {
   Serial.begin(115200);
   Serial.setTimeout(10);
+  delay(100);
+  // إرسال القيم الأولية للرسم
+  Serial.println("OK:STEP:" + String(step_degrees, 2));
+  Serial.println("OK:DELAY:" + String(delay_ms));
 }
 
 void loop() {
-  // استقبال الأوامر من السيريال
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
     command.trim();
 
     if (command.indexOf("START") >= 0) {
-      current_angle = 0.0;
       is_running = true;
-      last_send_time_us = micros();
+      last_send_time_ms = millis();
       Serial.println("OK:START");
+
     } else if (command.indexOf("STOP") >= 0) {
       is_running = false;
+      Serial.print("<");
+      Serial.print(current_angle, 2);
+      Serial.print(",0.0>");
+      Serial.println();
       Serial.println("OK:STOP");
+
     } else if (command.indexOf("RESET") >= 0) {
       current_angle = 0.0;
       is_running = false;
-      Serial.print("<"); Serial.print(current_angle); Serial.print(","); Serial.print(delay_ms); Serial.println(">");
+      Serial.println("<0.00,0.0>");
       Serial.println("OK:RESET");
-    } else if (command.startsWith("SPEED:")) {
-      float new_delay = command.substring(6).toFloat();
-      if (new_delay >= 0.1 && new_delay <= 5000.0) {
-        delay_ms = new_delay;
-        Serial.println("OK:SPEED:" + String(delay_ms, 1));
+
+    } else if (command.indexOf("INFO") >= 0) {
+      Serial.println("OK:STEP:" + String(step_degrees, 2));
+      Serial.println("OK:DELAY:" + String(delay_ms));
+
+    } else if (command.startsWith("STEP:")) {
+      float s = command.substring(5).toFloat();
+      if (s > 0.0) {
+        step_degrees = s;
+        Serial.println("OK:STEP:" + String(step_degrees, 2));
+      }
+
+    } else if (command.startsWith("DELAY:")) {
+      unsigned long d = command.substring(6).toInt();
+      if (d > 0) { 
+        delay_ms = d;
+        Serial.println("OK:DELAY:" + String(delay_ms));
       }
     }
   }
 
-  // non-blocking: ارسل الزاوية فقط لما يعدي الوقت المحدد (بالـ microseconds)
-  unsigned long delay_us = (unsigned long)(delay_ms * 1000.0);
-  if (is_running && (micros() - last_send_time_us >= delay_us)) {
-    last_send_time_us = micros();
+  unsigned long now = millis();
 
-    Serial.print("<"); Serial.print(current_angle); Serial.print(","); Serial.print(delay_ms, 1); Serial.println(">");
+  // ── Step & Delay Loop ──
+  if (is_running && (now - last_send_time_ms >= delay_ms)) {
+    last_send_time_ms = now;
 
-    current_angle += STEP_ANGLE;
-    if (current_angle >= 360.0) {
-      current_angle = 0.0;
-    }
+    // 1. زيادة الزاوية بالخطوة المحددة
+    current_angle += step_degrees; // الدوران مستمر حتى يتم إرسال STOP
+
+    // 2. إرسال البيانات للـ Serial للرسم في الشاشة
+    Serial.print("<");
+    Serial.print(current_angle, 2);
+    Serial.println(",0.0>"); // نرسل السرعة 0.0 لأننا لغينا حسابات الفيزيا
   }
 }

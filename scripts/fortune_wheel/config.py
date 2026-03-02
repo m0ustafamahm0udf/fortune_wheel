@@ -16,5 +16,6 @@ WINDOW_H = 768
 SEGMENT_COUNT = 8
 
 # ─── Smooth Rotation (RPi performance) ───
-ROTATION_CACHE_STEPS = 360
-LERP_SPEED = 25
+ROTATION_CACHE_STEPS = 720
+STOP_LERP_SPEED = 8            # used only when velocity=0 to settle on final angle
+SYNC_CORRECTION_FACTOR = 0.1   # gentle nudge toward NodeMCU's reported angle while spinning

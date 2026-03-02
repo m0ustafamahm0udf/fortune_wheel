@@ -3,13 +3,13 @@ wheel_renderer.py — رسم العجلة (lightweight)
 تصميم بسيط بدون أي alpha blending في الـ render loop.
 كل الرسم flat + direct draws على الشاشة.
 
-Pre-rendered rotation cache + angle interpolation for smooth RPi performance.
+Velocity-based local animation + pre-rendered rotation cache for smooth RPi performance.
 """
 
 import pygame
 import math
 from .colors import WHEEL_COLORS, WHITE, ACCENT_GOLD, CARD_DARK, SURFACE_DARK, darken
-from .config import SEGMENT_COUNT, ROTATION_CACHE_STEPS, LERP_SPEED
+from .config import SEGMENT_COUNT, ROTATION_CACHE_STEPS, STOP_LERP_SPEED, SYNC_CORRECTION_FACTOR
 
 
 class FortuneWheel:
@@ -19,6 +19,7 @@ class FortuneWheel:
         self.items = [f"No {i + 1}" for i in range(segment_count)]
         self.angle_rad = 0.0
         self._target_angle_rad = 0.0
+        self._velocity_dps = 0.0
         self.winner_index = -1
 
         self._rot_cache = []
@@ -29,18 +30,28 @@ class FortuneWheel:
         self._cached_size = 0
 
     def set_angle_deg(self, deg):
-        """Set target angle (degrees). The actual angle interpolates toward it."""
+        """Set the reference angle from NodeMCU (cumulative degrees, can exceed 360)."""
         self._target_angle_rad = math.radians(deg)
 
-    def update(self, dt):
-        """Interpolate current angle toward target for smooth movement."""
-        diff = self._target_angle_rad - self.angle_rad
-        diff = (diff + math.pi) % (2 * math.pi) - math.pi
+    def set_velocity(self, dps):
+        """Set angular velocity in degrees per second (from NodeMCU)."""
+        self._velocity_dps = dps
 
-        if abs(diff) < 0.0005:
-            self.angle_rad = self._target_angle_rad
+    def update(self, dt):
+        """Velocity-based local animation with gentle sync correction."""
+        if self._velocity_dps > 0.0:
+            self.angle_rad += math.radians(self._velocity_dps) * dt
+
+            sync_diff = self._target_angle_rad - self.angle_rad
+            self.angle_rad += sync_diff * SYNC_CORRECTION_FACTOR
         else:
-            self.angle_rad += diff * min(1.0, dt * LERP_SPEED)
+            diff = self._target_angle_rad - self.angle_rad
+            diff = (diff + math.pi) % (2 * math.pi) - math.pi
+
+            if abs(diff) < 0.001:
+                self.angle_rad = self._target_angle_rad
+            else:
+                self.angle_rad += diff * min(1.0, dt * STOP_LERP_SPEED)
 
     def calculate_winner(self):
         seg_angle = 2 * math.pi / self.segment_count

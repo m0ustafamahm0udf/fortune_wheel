@@ -22,6 +22,7 @@ class Button:
         self.font_size = font_size
         self.hovered = False
         self.pressed = False
+        self.is_active = False
         self._font = None
         self._label = None
 
@@ -45,7 +46,10 @@ class Button:
     def draw(self, screen, dt):
         x, y, w, h = self.rect.x, self.rect.y, self.rect.w, self.rect.h
 
-        if self.pressed:
+        if self.is_active:
+            bg = PRIMARY
+            border_color = WHITE
+        elif self.pressed:
             bg = darken(self.color, 0.5)
         elif self.hovered:
             bg = brighten(self.color, 1.15)
@@ -54,7 +58,8 @@ class Button:
 
         pygame.draw.rect(screen, bg, (x, y, w, h), border_radius=8)
 
-        border_color = WHITE if self.hovered else GREY_A8
+        if not self.is_active:
+            border_color = WHITE if self.hovered else GREY_A8
         pygame.draw.rect(screen, border_color, (x, y, w, h), 1, border_radius=8)
 
         if self._font is None:
@@ -103,6 +108,7 @@ class ControlPanel:
         self.btn_start = Button(0, 0, 130, 50, "START", (40, 180, 80), icon='play')
         self.btn_stop = Button(0, 0, 130, 50, "STOP", ERROR_RED, icon='stop')
         self.btn_reset = Button(0, 0, 130, 50, "RESET", PRIMARY, icon='reset')
+
         self.btn_fullscreen = Button(0, 0, 50, 40, "[ ]", CARD_DARK, font_size=14)
         self.btn_quit = Button(0, 0, 50, 40, "X", (100, 30, 30), font_size=18)
 
@@ -124,16 +130,11 @@ class ControlPanel:
         self.btn_quit.update_position(screen_w - 58, 12)
 
     def handle_event(self, event):
-        if self.btn_start.handle_event(event):
-            return 'START'
-        if self.btn_stop.handle_event(event):
-            return 'STOP'
-        if self.btn_reset.handle_event(event):
-            return 'RESET'
-        if self.btn_fullscreen.handle_event(event):
-            return 'FULLSCREEN'
-        if self.btn_quit.handle_event(event):
-            return 'QUIT'
+        if self.btn_start.handle_event(event): return 'START'
+        if self.btn_stop.handle_event(event): return 'STOP'
+        if self.btn_reset.handle_event(event): return 'RESET'
+        if self.btn_fullscreen.handle_event(event): return 'FULLSCREEN'
+        if self.btn_quit.handle_event(event): return 'QUIT'
         return None
 
     def draw(self, screen, dt):
