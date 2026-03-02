@@ -46,8 +46,13 @@ def draw(screen, wheel, connected, delay_ms):
     # ── الديلاي الحالي + وقت اللفة الكاملة ──
     if delay_ms > 0:
         rotation_sec = 360 * delay_ms / 1000.0
-        delay_text = f"Delay: {delay_ms}ms"
-        rotation_text = f"Full rotation: {rotation_sec:.1f}s"
+        delay_text = f"Delay: {delay_ms:.1f}ms" if delay_ms < 1 else f"Delay: {delay_ms:.0f}ms"
+        if rotation_sec < 0.1:
+            rotation_text = f"Full rotation: {rotation_sec * 1000:.0f}ms"
+        elif rotation_sec < 1:
+            rotation_text = f"Full rotation: {rotation_sec:.2f}s"
+        else:
+            rotation_text = f"Full rotation: {rotation_sec:.1f}s"
     else:
         delay_text = "Delay: --"
         rotation_text = "Full rotation: --"

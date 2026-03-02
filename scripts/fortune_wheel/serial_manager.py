@@ -93,8 +93,8 @@ def _reader_loop():
                                 if 0.0 <= a < 360.0:
                                     current_angle_deg = a
                                 if len(parts) >= 2:
-                                    d = int(parts[1])
-                                    if 1 <= d <= 5000:
+                                    d = float(parts[1])
+                                    if 0.1 <= d <= 5000:
                                         current_delay_ms = d
                             except (ValueError, IndexError):
                                 pass
