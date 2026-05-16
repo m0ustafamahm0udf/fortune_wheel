@@ -28,17 +28,17 @@ def _handle_command(command, wheel, is_fullscreen, screen, panel):
     running = True
 
     if command == 'START':
-        serial_manager.send_command("START\r\n")
+        # IKS9 سنسور قراءة فقط — مفيش حاجة تتبعت. مجرد تجهيز اللعبة.
         wheel.winner_index = -1
-        print("[CMD] ▶ START")
+        print("[CMD] ▶ START — clearing winner, awaiting rotation")
 
     elif command == 'STOP':
-        serial_manager.send_command("STOP\r\n")
+        # نقفل الفائز على الزاوية الحالية اللي قراها السنسور
         wheel.winner_index = wheel.calculate_winner()
         print(f"[CMD] ⏹ STOP → Winner: {wheel.items[wheel.winner_index]}")
 
     elif command == 'RESET':
-        serial_manager.send_command("RESET\r\n")
+        serial_manager.zero_position()
         wheel.winner_index = -1
         wheel.set_angle_deg(0)
         wheel.set_velocity(0)

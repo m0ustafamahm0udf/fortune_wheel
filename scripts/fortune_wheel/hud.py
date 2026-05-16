@@ -40,15 +40,19 @@ def draw(screen, wheel, connected):
     screen.blit(font_info.render(status_text, True, status_color), (20, 52))
 
     # ── الزاوية الحالية ──
-    angle_deg = math.degrees(wheel.angle_rad) % 360
-    screen.blit(font_info.render(f"Angle: {angle_deg:.1f}", True, GREY_A8), (20, 78))
-
-    # ── إعدادات الحركة (Step & Delay) ──
     from . import serial_manager
-    step_text = f"Step: {serial_manager.current_step_deg} deg"
-    delay_text = f"Delay: {serial_manager.current_delay_ms} ms"
-    screen.blit(font_info.render(step_text, True, ACCENT_CYAN), (20, 104))
-    screen.blit(font_info.render(delay_text, True, GREY_A8), (20, 130))
+    angle_deg = math.degrees(wheel.angle_rad) % 360
+    screen.blit(font_info.render(f"Angle: {angle_deg:.1f}°", True, GREY_A8), (20, 78))
+
+    # ── بيانات الـ IKS9 ──
+    speed_text = f"Speed: {serial_manager.current_velocity_dps:.1f} °/s"
+    dist_text = (
+        f"Distance: {serial_manager.current_distance_mm:.1f} mm  |  "
+        f"Pulses: {serial_manager.current_pulses}  |  "
+        f"{'FWD' if serial_manager.current_direction_fwd else 'REV'}"
+    )
+    screen.blit(font_info.render(speed_text, True, ACCENT_CYAN), (20, 104))
+    screen.blit(font_info.render(dist_text, True, GREY_A8), (20, 130))
 
     # ── الفائز ──
     if wheel.winner_index >= 0:
